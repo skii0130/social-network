@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>班级社会网络分析图</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'PingFang SC', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 { font-size: 2rem; margin-bottom: 10px; }
+        .header p { opacity: 0.8; }
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            padding: 25px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .stat-card {
+            text-align: center;
+            padding: 15px 30px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .stat-card .number {
+            font-size: 2.2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            padding: 15px;
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+        }
+        .legend-color.name { background: #e74c3c; }
+        .legend-color.email { background: #3498db; }
+        .legend-color.url { background: #2ecc71; }
+        #chart {
+            width: 100%;
+            height: 650px;
+        }
+        .metrics {
+            padding: 25px 30px;
+            background: #f8f9fa;
+            border-top: 1px solid #e0e0e0;
+        }
+        .metrics h3 {
+            margin-bottom: 20px;
+            color: #2c3e50;
+            font-size: 1.3rem;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+        }
+        .metrics-box {
+            background: white;
+            border-radius: 12px;
+            padding: 18px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .metrics-box h4 {
+            color: #667eea;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #667eea;
+        }
+        .top-list {
+            list-style: none;
+            padding: 0;
+        }
+        .top-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        .rank {
+            display: inline-block;
+            width: 25px;
+            height: 25px;
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 25px;
+            font-size: 12px;
+            margin-right: 10px;
+        }
+        .note {
+            text-align: center;
+            padding: 15px;
+            color: #888;
+            font-size: 12px;
+            background: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>📊 班级社会网络分析</h1>
+        <p>有向网络图 | 姓名 → 邮箱/网址/联络人 | 节点大小代表被关注度</p>
+    </div>
+    
+    <div class="stats" id="stats"></div>
+    
+    <div class="legend">
+        <div class="legend-item"><div class="legend-color name"></div><span>🔴 姓名节点（源节点）</span></div>
+        <div class="legend-item"><div class="legend-color email"></div><span>🔵 邮箱节点</span></div>
+        <div class="legend-item"><div class="legend-color url"></div><span>🟢 网址节点</span></div>
+        <div class="legend-item"><span>➡️ 有向箭头</span></div>
+    </div>
+    
+    <div id="chart"></div>
+    
+    <div class="metrics" id="metrics"></div>
+    <div class="note">💡 提示：可拖拽节点调整位置 | 鼠标滚轮缩放 | 悬停查看详情 | 箭头方向: 源→目标</div>
+</div>
+
+<script>
+// ============================================
+// 基于CSV数据提取的节点（姓名、邮箱、网址）
+// ============================================
+
+// 所有姓名节点（从CSV提取的去重后名单）
+const nameNodes = [
+    "文鑫曼绮", "罗勋凡", "冯展颜", "尹明皓", "章乐怡", "刘宸汝", "刘静燃", "程新然",
+    "王姝", "罗布顿珠", "尼玛普赤", "岑利蕤", "吴昕雅", "严子君", "罗广聪", "范文畅",
+    "刘绫佳", "段梦媛", "颂格拉", "苏茹欣", "魏悦", "李熙慧", "罗萌萌", "杨凤", "徐泾泾",
+    "周丽君", "苏宣同", "沈冬晴", "黄诗琪", "梁晶晶", "章文静", "姜雨晗", "钱慧茹",
+    "付雨昕", "武宝怡", "王宇慧", "彭洪钰", "邬俊贤", "邢子菁", "丁若锦", "邓欣瑜",
+    "刘润泽", "钱奕彤", "宋璇子", "曹菡清", "张梦如", "许春禾", "邢奕辰", "孔海悦"
+];
+
+// 邮箱节点
+const emailNodes = [
+    "2116304682@qq.com", "1010213392@qq.com", "1513255896@qq.com", "1374524675@qq.com",
+    "819400605@qq.com", "3384561501@qq.com", "3435078991@qq.com", "2905027637@qq.com",
+    "463628693@qq.com", "norbudondup@qq.com", "nmpc.0713@qq.com", "1966768778@qq.com",
+    "khdrh@qq.com", "1760273906@qq.com", "420262353@qq.com", "fwc45b@163.com",
+    "1397819838@qq.com", "funnydmy@163.com", "431556842@qq.com", "lazysrx@163.com",
+    "2924897751@qq.com", "3112799570@qq.com", "1129085760@qq.com", "2116907676@qq.com",
+    "2582078523@qq.com", "3250023760@qq.com", "sxuantong26@qq.com", "926108130@qq.com",
+    "2073014016@qq.com", "3014676877@qq.com", "hzhbymygxf@qq.com", "3290925488@qq.com",
+    "2964684500@qq.com", "3440370783@qq.com", "1973416576@qq.com", "1159640140@qq.com",
+    "phy_0303@qq.com", "dailywjx@163.com", "191085898@qq.com", "3130307518@qq.com",
+    "767941056@qq.com", "1918661469@qq.com", "2488189547@qq.com", "3067165530@qq.com",
+    "2403408015.suda@vip.163.com", "2714423030@qq.com", "1457214600@qq.com", "2794463799@qq.com",
+    "2070895629@qq.com"
+];
+
+// 网址节点
+const urlNodes = [
+    "modest-camellia-1xvq79.mysxl.cn", "olive-lark-1xvqv8.mysxl.cn",
+    "freezing-tuesday-434.notion.site", "humorous-cuckoo-1xvpzv.mysxl.cn",
+    "zhangleyi604.github.io/workhome", "magenta-whale-1xvq18.mysxl.cn",
+    "brilliant-yucca-1xvh1c.mysxl.cn", "teal-peach-1xvgpd.mysxl.cn",
+    "norbudondup.mysxl.cn", "dingjiayou.mysxl.cn", "cinnamon-cyclamen-1xvqwx.mysxl.cn",
+    "beige-taro-1xvpf3.mysxl.cn", "amber-camellia-1xczg6.mysxl.cn", "monochrome-onion-1xvh7t.mysxl.cn",
+    "khaki-flamingo-1xbphk.mysxl.cn", "steady-canary-1xvgl9.mysxl.cn",
+    "energetic-hyacinth-1xvh0h.mysxl.cn", "obedient-dolphin-1xbpgc.mysxl.cn", "suruxin.mysxl.cn",
+    "tawny-falcon-1xvpqt.mysxl.cn", "lmmm.mysxl.cn", "puce-bison-1xvgmw.mysxl.cn",
+    "rose-swam-1xvplj.mysxl.cn", "shellyker1007.mysxl.cn", "original-romaine-1xvhvj.mysxl.cn",
+    "humorous-orange-1xvh93.mysxl.cn", "dedicated-emu-1xvh24.mysxl.cn", "impartial-bison-1xvqc2.mysxl.cn",
+    "proactive-yucca-1xvp83.mysxl.cn", "putaoboluqipaoshui.mysxl.cn", "mustard-lark-1xvgqb.mysxl.cn",
+    "ffyyxx.mysxl.cn", "sociable-orange-1xczvf.mysxl.cn", "gray-swam-1xvq2t.mysxl.cn",
+    "responsible-cuckoo-1xvq5w.mysxl.cn", "dailywjx.mysxl.cn", "smart-raccoon-1xvpmt.mysxl.cn",
+    "dedicated-iris-1xvh3m.mysxl.cn", "qualified-camellia-1xvpbk.mysxl.cn", "thrifty-lichee-1xvp9q.mysxl.cn",
+    "brave-parrot-1xvpcx.mysxl.cn", "limecynthia-platypus-1xvhd9.mysxl.cn", "gold-ferret-1xvpd6.mysxl.cn",
+    "virtuous-penguin-1xvpv4.mysxl.cn", "ultramarine-alligator-1h5w8m.mysxl.cn", "lilac-canna-1xvgn8.mysxl.cn"
+];
+
+// ============================================
+// 构建边（有向连接）
+// ============================================
+
+// 姓名 → 邮箱 的边（按索引对应）
+const emailEdges = nameNodes.map((name, idx) => ({ source: name, target: emailNodes[idx % emailNodes.length] }));
+
+// 姓名 → 网址 的边
+const urlEdges = nameNodes.map((name, idx) => ({ source: name, target: urlNodes[idx % urlNodes.length] }));
+
+// 姓名 → 联络人 的边（基于原始数据中的互访关系）
+const contactEdges = [
+    ["刘绫佳", "段梦媛"], ["刘绫佳", "章乐怡"], ["刘绫佳", "苏茹欣"], ["刘绫佳", "罗勋凡"],
+    ["章乐怡", "刘绫佳"], ["章乐怡", "杨凤"], ["章乐怡", "罗勋凡"], ["章乐怡", "邢奕辰"],
+    ["段梦媛", "刘绫佳"], ["段梦媛", "章乐怡"], ["段梦媛", "苏茹欣"], ["段梦媛", "王姝"],
+    ["苏茹欣", "王姝"], ["苏茹欣", "段梦媛"], ["苏茹欣", "刘绫佳"], ["苏茹欣", "章文静"],
+    ["钱慧茹", "沈冬晴"], ["钱慧茹", "武宝怡"], ["钱慧茹", "魏悦"], ["钱慧茹", "丁若锦"],
+    ["沈冬晴", "姜雨晗"], ["沈冬晴", "付雨昕"], ["沈冬晴", "钱奕彤"], ["沈冬晴", "武宝怡"],
+    ["付雨昕", "姜雨晗"], ["付雨昕", "钱奕彤"], ["付雨昕", "沈冬晴"], ["付雨昕", "邢奕辰"],
+    ["尹明皓", "罗广聪"], ["尹明皓", "邬俊贤"], ["尹明皓", "严子君"], ["尹明皓", "罗布顿珠"],
+    ["罗广聪", "尹明皓"], ["邬俊贤", "罗布顿珠"], ["邬俊贤", "罗广聪"], ["邬俊贤", "严子君"],
+    ["王姝", "苏茹欣"], ["王姝", "冯展颜"], ["王姝", "段梦媛"], ["王姝", "罗萌萌"],
+    ["魏悦", "许春禾"], ["魏悦", "钱慧茹"], ["魏悦", "丁若锦"], ["魏悦", "罗萌萌"],
+    ["罗萌萌", "王姝"], ["罗萌萌", "武宝怡"], ["罗萌萌", "魏悦"], ["罗萌萌", "钱慧茹"],
+    ["许春禾", "刘润泽"], ["许春禾", "邢奕辰"], ["许春禾", "孔海悦"], ["许春禾", "付雨昕"],
+    ["邢奕辰", "孔海悦"], ["邢奕辰", "许春禾"], ["邢奕辰", "刘润泽"], ["邢奕辰", "章乐怡"],
+    ["刘润泽", "许春禾"], ["刘润泽", "邢奕辰"], ["刘润泽", "孔海悦"], ["刘润泽", "付雨昕"],
+    ["曹菡清", "张梦如"], ["曹菡清", "刘静燃"], ["曹菡清", "章文静"], ["曹菡清", "宋璇子"],
+    ["张梦如", "钱奕彤"], ["张梦如", "曹菡清"], ["张梦如", "刘静燃"], ["张梦如", "章文静"],
+    ["宋璇子", "沈冬晴"], ["宋璇子", "曹菡清"], ["宋璇子", "钱慧茹"], ["宋璇子", "颂格拉"],
+    ["颂格拉", "梁晶晶"], ["颂格拉", "苏宣同"], ["颂格拉", "尼玛普赤"], ["颂格拉", "丁若锦"],
+    ["梁晶晶", "尼玛普赤"], ["梁晶晶", "颂格拉"], ["梁晶晶", "苏宣同"], ["梁晶晶", "邢子菁"],
+    ["苏宣同", "颂格拉"], ["苏宣同", "梁晶晶"], ["苏宣同", "尼玛普赤"], ["苏宣同", "李熙慧"],
+    ["丁若锦", "徐泾泾"], ["丁若锦", "邢子菁"], ["丁若锦", "邓欣瑜"], ["丁若锦", "武宝怡"],
+    ["徐泾泾", "邢子菁"], ["徐泾泾", "邓欣瑜"], ["徐泾泾", "丁若锦"], ["徐泾泾", "张梦如"],
+    ["邢子菁", "徐泾泾"], ["邢子菁", "丁若锦"], ["邢子菁", "邓欣瑜"], ["邢子菁", "武宝怡"],
+    ["邓欣瑜", "邢子菁"], ["邓欣瑜", "徐泾泾"], ["邓欣瑜", "丁若锦"],
+    ["刘静燃", "章文静"], ["刘静燃", "曹菡清"], ["刘静燃", "张梦如"], ["刘静燃", "文鑫曼绮"],
+    ["程新然", "文鑫曼绮"], ["程新然", "王宇慧"], ["程新然", "彭洪钰"], ["程新然", "苏茹欣"],
+    ["彭洪钰", "王宇慧"], ["彭洪钰", "程新然"], ["彭洪钰", "文鑫曼绮"], ["彭洪钰", "张梦如"],
+    ["王宇慧", "彭洪钰"], ["王宇慧", "文鑫曼绮"], ["王宇慧", "程新然"], ["王宇慧", "吴昕雅"],
+    ["吴昕雅", "王宇慧"], ["吴昕雅", "张梦如"], ["吴昕雅", "付雨昕"], ["吴昕雅", "章文静"],
+    ["黄诗琪", "宋璇子"], ["黄诗琪", "刘宸汝"], ["黄诗琪", "范文畅"], ["黄诗琪", "付雨昕"],
+    ["范文畅", "刘宸汝"], ["范文畅", "黄诗琪"], ["范文畅", "宋璇子"], ["范文畅", "李熙慧"],
+    ["刘宸汝", "黄诗琪"], ["刘宸汝", "宋璇子"], ["刘宸汝", "范文畅"], ["刘宸汝", "沈冬晴"],
+    ["姜雨晗", "付雨昕"], ["姜雨晗", "钱奕彤"], ["姜雨晗", "沈冬晴"], ["姜雨晗", "黄诗琪"],
+    ["钱奕彤", "张梦如"], ["钱奕彤", "曹菡清"], ["钱奕彤", "姜雨晗"], ["钱奕彤", "沈冬晴"],
+    ["岑利蕤", "苏茹欣"], ["岑利蕤", "段梦媛"], ["岑利蕤", "王姝"], ["岑利蕤", "尼玛普赤"],
+    ["尼玛普赤", "梁晶晶"], ["尼玛普赤", "颂格拉"], ["尼玛普赤", "苏宣同"], ["尼玛普赤", "罗布顿珠"],
+    ["罗布顿珠", "尹明皓"], ["罗布顿珠", "严子君"], ["罗布顿珠", "邬俊贤"], ["罗布顿珠", "罗广聪"],
+    ["严子君", "段梦媛"], ["严子君", "沈冬晴"], ["严子君", "付雨昕"], ["严子君", "邬俊贤"],
+    ["杨凤", "刘绫佳"], ["杨凤", "章乐怡"], ["杨凤", "段梦媛"], ["杨凤", "苏茹欣"],
+    ["武宝怡", "沈冬晴"], ["武宝怡", "钱慧茹"], ["武宝怡", "魏悦"], ["武宝怡", "刘宸汝"]
+];
+
+// ============================================
+// 构建完整的节点和边数据结构
+// ============================================
+
+// 收集所有节点
+const allNames = [...new Set(nameNodes)];
+const allEmails = [...new Set(emailNodes)];
+const allUrls = [...new Set(urlNodes)];
+
+// 构建节点数组
+let nodes = [];
+let nodeIndexMap = new Map();
+
+// 添加姓名节点（category 0）
+allNames.forEach((name, idx) => {
+    nodes.push({
+        id: idx,
+        name: name,
+        category: 0,
+        label: name
+    });
+    nodeIndexMap.set(name, idx);
+});
+
+// 添加邮箱节点（category 1）
+let emailStartIdx = nodes.length;
+allEmails.forEach((email, idx) => {
+    nodes.push({
+        id: emailStartIdx + idx,
+        name: email,
+        category: 1,
+        label: email.split('@')[0]
+    });
+    nodeIndexMap.set(email, emailStartIdx + idx);
+});
+
+// 添加网址节点（category 2）
+let urlStartIdx = nodes.length;
+allUrls.forEach((url, idx) => {
+    let shortName = url.length > 25 ? url.substring(0, 22) + '...' : url;
+    nodes.push({
+        id: urlStartIdx + idx,
+        name: url,
+        category: 2,
+        label: shortName
+    });
+    nodeIndexMap.set(url, urlStartIdx + idx);
+});
+
+// 构建边数组
+let links = [];
+let indegree = new Array(nodes.length).fill(0);
+
+// 辅助函数：添加边
+function addEdge(source, target) {
+    if (nodeIndexMap.has(source) && nodeIndexMap.has(target)) {
+        links.push({
+            source: nodeIndexMap.get(source),
+            target: nodeIndexMap.get(target)
+        });
+        indegree[nodeIndexMap.get(target)]++;
+    }
+}
+
+// 添加所有边
+emailEdges.forEach(edge => addEdge(edge.source, edge.target));
+urlEdges.forEach(edge => addEdge(edge.source, edge.target));
+contactEdges.forEach(edge => addEdge(edge[0], edge[1]));
+
+// 去重边（使用Set）
+const uniqueLinks = [];
+const linkSet = new Set();
+links.forEach(link => {
+    const key = `${link.source}-${link.target}`;
+    if (!linkSet.has(key)) {
+        linkSet.add(key);
+        uniqueLinks.push(link);
+    }
+});
+
+// 计算入度统计
+const indegreeCount = {};
+nodes.forEach(node => {
+    indegreeCount[node.name] = 0;
+});
+uniqueLinks.forEach(link => {
+    indegreeCount[nodes[link.target].name]++;
+});
+
+// 设置节点大小（基于入度）
+nodes.forEach(node => {
+    const indeg = indegreeCount[node.name] || 1;
+    node.symbolSize = Math.min(50, Math.max(18, 15 + indeg * 2));
+    node.value = indeg;
+});
+
+// 计算 Top 入度
+const indegreeList = allNames.map(name => ({
+    name: name,
+    indegree: indegreeCount[name] || 0
+})).sort((a, b) => b.indegree - a.indegree);
+
+// 统计卡片
+document.getElementById('stats').innerHTML = `
+    <div class="stat-card"><div class="number">${nodes.length}</div><div>📌 总节点数</div></div>
+    <div class="stat-card"><div class="number">${uniqueLinks.length}</div><div>🔗 总边数</div></div>
+    <div class="stat-card"><div class="number">${(uniqueLinks.length / (nodes.length * nodes.length) * 100).toFixed(2)}%</div><div>📊 网络密度</div></div>
+    <div class="stat-card"><div class="number">${indegreeList[0]?.indegree || 0}</div><div>🏆 最高入度</div></div>
+`;
+
+// 指标面板
+document.getElementById('metrics').innerHTML = `
+    <h3>📈 网络指标分析</h3>
+    <div class="metrics-grid">
+        <div class="metrics-box">
+            <h4>🎯 入度中心性 Top 10（最受欢迎）</h4>
+            <ul class="top-list">
+                ${indegreeList.slice(0, 10).map((item, i) => `
+                    <li><span><span class="rank">${i+1}</span>${item.name}</span><span style="color:#667eea; font-weight:bold;">${item.indegree}</span></li>
+                `).join('')}
+            </ul>
+        </div>
+        <div class="metrics-box">
+            <h4>📊 网络整体统计</h4>
+            <ul class="top-list">
+                <li>节点总数: <strong>${nodes.length}</strong> (姓名:${allNames.length} / 邮箱:${allEmails.length} / 网址:${allUrls.length})</li>
+                <li>边总数: <strong>${uniqueLinks.length}</strong> (有向边)</li>
+                <li>网络密度: <strong>${(uniqueLinks.length / (nodes.length * nodes.length) * 100).toFixed(2)}%</strong></li>
+                <li>平均出度: <strong>${(uniqueLinks.length / allNames.length).toFixed(2)}</strong></li>
+                <li>平均入度: <strong>${(uniqueLinks.length / nodes.length).toFixed(2)}</strong></li>
+            </ul>
+        </div>
+        <div class="metrics-box">
+            <h4>🏆 班级影响力排行</h4>
+            <ul class="top-list">
+                ${indegreeList.slice(0, 5).map((item, i) => `
+                    <li><span>🥇${i===0?'🥇':(i===1?'🥈':(i===2?'🥉':'  '))} ${item.name}</span><span style="color:#e74c3c; font-weight:bold;">被${item.indegree}人关注</span></li>
+                `).join('')}
+            </ul>
+        </div>
+    </div>
+`;
+
+// ============================================
+// 初始化 ECharts 网络图
+// ============================================
+const chartDom = document.getElementById('chart');
+const myChart = echarts.init(chartDom);
+
+const categories = [
+    { name: '姓名节点', itemStyle: { color: '#e74c3c' } },
+    { name: '邮箱节点', itemStyle: { color: '#3498db' } },
+    { name: '网址节点', itemStyle: { color: '#2ecc71' } }
+];
+
+const option = {
+    title: { show: false },
+    tooltip: {
+        trigger: 'item',
+        formatter: (params) => {
+            if (params.dataType === 'node') {
+                const node = params.data;
+                const typeName = node.category === 0 ? '👤 姓名' : (node.category === 1 ? '📧 邮箱' : '🌐 网址');
+                return `<strong>${node.name}</strong><br/>${typeName}<br/>被关注次数(入度): ${node.value}`;
+            } else if (params.dataType === 'edge') {
+                const source = nodes[params.data.source];
+                const target = nodes[params.data.target];
+                return `${source?.name} → ${target?.name}`;
+            }
+            return '';
+        }
+    },
+    series: [{
+        type: 'graph',
+        layout: 'force',
+        force: {
+            repulsion: 800,
+            edgeLength: 120,
+            gravity: 0.08,
+            friction: 0.2,
+            initIterations: 400
+        },
+        roam: true,
+        draggable: true,
+        data: nodes,
+        links: uniqueLinks,
+        categories: categories,
+        label: {
+            show: true,
+            position: 'right',
+            fontSize: 9,
+            offset: [5, 0],
+            formatter: (params) => {
+                if (params.name.length > 18) return params.name.substring(0, 15) + '...';
+                return params.name;
+            }
+        },
+        edgeSymbol: ['none', 'arrow'],
+        edgeSymbolSize: [0, 8],
+        lineStyle: {
+            color: '#aaa',
+            curveness: 0.2,
+            width: 1.2,
+            opacity: 0.6
+        },
+        emphasis: {
+            scale: true,
+            label: { show: true, fontSize: 11, fontWeight: 'bold' }
+        },
+        itemStyle: {
+            borderColor: '#fff',
+            borderWidth: 2
+        },
+        symbolSize: (value, params) => params.data.symbolSize || 20,
+        layoutAnimation: true
+    }]
+};
+
+myChart.setOption(option);
+
+// 响应窗口大小
+window.addEventListener('resize', () => myChart.resize());
+</script>
+</body>
+</html>
